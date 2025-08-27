@@ -2,30 +2,31 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Earth FPS Explorer</title>
+<title>Earth FPS Explorer – Live Fix</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <style>
-  html,body { margin:0; height:100%; overflow:hidden; background:#000; }
-  canvas { display:block; }
-
-  #hud {
-    position:absolute; top:10px; left:50%; transform:translateX(-50%);
-    background:rgba(20,20,24,.65); border:1px solid rgba(255,255,255,.15);
-    border-radius:12px; backdrop-filter: blur(8px); padding:8px 12px; color:#fff;
-    font-family:sans-serif; font-size:14px; z-index:10;
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;}
+  canvas{display:block;}
+  #hud{
+    position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    background:rgba(20,20,24,.65);border:1px solid rgba(255,255,255,.15);
+    border-radius:12px;backdrop-filter:blur(8px);padding:8px 12px;color:#fff;
+    font-family:sans-serif;font-size:14px;z-index:10;
   }
-  #hud button { margin:2px; padding:6px 10px; border:none; border-radius:8px;
-    background:rgba(255,255,255,.15); color:#fff; cursor:pointer; }
-  #hud button:active { transform:translateY(1px); }
-
-  #controls {
-    position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
-    width:240px; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,80px);
-    gap:8px; z-index:10;
+  #hud button{
+    margin:2px;padding:6px 10px;border:none;border-radius:8px;
+    background:rgba(255,255,255,.15);color:#fff;cursor:pointer;
   }
-  #controls button {
-    border-radius:12px; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.2);
-    color:#fff; font-size:20px; cursor:pointer;
+  #hud button:active{transform:translateY(1px);}
+  #controls{
+    position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+    width:240px;display:grid;grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,80px);gap:8px;z-index:10;
+  }
+  #controls button{
+    border-radius:12px;background:rgba(0,0,0,.5);
+    border:1px solid rgba(255,255,255,.2);color:#fff;
+    font-size:20px;cursor:pointer;
   }
 </style>
 </head>
@@ -38,117 +39,80 @@
   <button onclick="stepDown()">Schritt−</button>
   <span id="stepLabel">Schritt: 2 m</span>
 </div>
-
 <div id="controls">
   <span></span><button id="btnFwd">↑</button><span></span>
   <button id="btnLeft">←</button><button id="btnBack">↓</button><button id="btnRight">→</button>
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/controls/PointerLockControls.js"></script>
 <script>
-// === Szene und Kamera ===
-let scene = new THREE.Scene();
-let camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
-let renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight);
+// Basis-Satellitentextur (Blue Marble) als Data-URL
+const earthDataURL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD..."; // stark verkürzt hier (voll einfügen)
+
+let scene=new THREE.Scene();
+let camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,5000);
+let renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// === Licht ===
 scene.add(new THREE.AmbientLight(0x999999));
-let sun = new THREE.DirectionalLight(0xffffff,1);
+let sun=new THREE.DirectionalLight(0xffffff,1);
 sun.position.set(5,3,5);
 scene.add(sun);
 
-// === Erde ===
-// NASA Blue Marble Tiles (einfache globale Textur als Fallback)
-const earthTex = new THREE.TextureLoader().load(
-  "https://eoimages.gsfc.nasa.gov/images/imagerecords/74000/74440/world.topo.bathy.200412.3x5400x2700.jpg"
-);
-const earthMat = new THREE.MeshPhongMaterial({ map: earthTex });
-let earth = new THREE.Mesh(new THREE.SphereGeometry(100,128,128), earthMat);
+let geo=new THREE.SphereGeometry(100,128,128);
+let tex=new THREE.TextureLoader().load(earthDataURL);
+let mat=new THREE.MeshPhongMaterial({map:tex});
+let earth=new THREE.Mesh(geo,mat);
 scene.add(earth);
 
-// === FPS Controls ===
-let controls = new THREE.PointerLockControls(camera, document.body);
-document.body.addEventListener("click", ()=>controls.lock());
-camera.position.set(0,102,0); // knapp über Oberfläche
+let controls=new THREE.PointerLockControls(camera,document.body);
+document.body.addEventListener("click",()=>controls.lock());
+camera.position.set(0,102,0);
 
-// === Bewegung ===
-let move={fwd:0, back:0, left:0, right:0};
-let stepSize=2;
-
-document.addEventListener("keydown", e=>{
+let move={fwd:0,back:0,left:0,right:0},stepSize=2;
+document.addEventListener("keydown",e=>{
   if(e.code==="KeyW"||e.code==="ArrowUp") move.fwd=1;
   if(e.code==="KeyS"||e.code==="ArrowDown") move.back=1;
   if(e.code==="KeyA"||e.code==="ArrowLeft") move.left=1;
   if(e.code==="KeyD"||e.code==="ArrowRight") move.right=1;
 });
-document.addEventListener("keyup", e=>{
+document.addEventListener("keyup",e=>{
   if(e.code==="KeyW"||e.code==="ArrowUp") move.fwd=0;
   if(e.code==="KeyS"||e.code==="ArrowDown") move.back=0;
   if(e.code==="KeyA"||e.code==="ArrowLeft") move.left=0;
   if(e.code==="KeyD"||e.code==="ArrowRight") move.right=0;
 });
-
-// Touch Controls
-function hold(el,pressFn,releaseFn){
+function hold(el,press,rel){
   let active=false;
-  const start=e=>{e.preventDefault(); if(!active){active=true; pressFn();}};
-  const end=()=>{ if(active){active=false; releaseFn();}};
-  el.addEventListener("touchstart",start,{passive:false});
-  el.addEventListener("touchend",end);
-  el.addEventListener("mousedown",start);
-  el.addEventListener("mouseup",end);
-  el.addEventListener("mouseleave",end);
+  el.addEventListener("touchstart",e=>{e.preventDefault(); if(!active){active=true;press();}}, {passive:false});
+  el.addEventListener("touchend",()=>{active=false;rel();});
+  el.addEventListener("mousedown",()=>{active=true;press();});
+  el.addEventListener("mouseup",()=>{active=false;rel();});
 }
-hold(document.getElementById("btnFwd"), ()=>{move.fwd=1;}, ()=>{move.fwd=0;});
-hold(document.getElementById("btnBack"),()=>{move.back=1;},()=>{move.back=0;});
-hold(document.getElementById("btnLeft"),()=>{move.left=1;},()=>{move.left=0;});
-hold(document.getElementById("btnRight"),()=>{move.right=1;},()=>{move.right=0;});
+hold(document.getElementById("btnFwd"), ()=>move.fwd=1, ()=>move.fwd=0);
+hold(document.getElementById("btnBack"),()=>move.back=1,()=>move.back=0);
+hold(document.getElementById("btnLeft"),()=>move.left=1,()=>move.left=0);
+hold(document.getElementById("btnRight"),()=>move.right=1,()=>move.right=0);
 
-// === Animation ===
 function animate(){
   requestAnimationFrame(animate);
-  updateMovement();
-  renderer.render(scene,camera);
-}
-animate();
-
-function updateMovement(){
-  const speed = stepSize*0.05;
+  const speed=stepSize*0.05;
   if(move.fwd) controls.moveForward(speed);
   if(move.back) controls.moveForward(-speed);
   if(move.left) controls.moveRight(-speed);
   if(move.right) controls.moveRight(speed);
+  camera.position.copy(camera.position.clone().normalize().multiplyScalar(102));
+  renderer.render(scene,camera);
+}
+animate();
 
-  // Spielerhöhe immer knapp über Erdoberfläche halten
-  const pos = camera.position.clone().normalize().multiplyScalar(102);
-  camera.position.copy(pos);
-}
+function resetView(){camera.position.set(0,102,0);controls.getObject().rotation.set(0,0,0);}
+function toggleWireframe(){earth.material.wireframe=!earth.material.wireframe;}
+function stepUp(){stepSize=Math.min(50,stepSize+1);document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m";}
+function stepDown(){stepSize=Math.max(1,stepSize-1);document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m";}
 
-// === HUD Funktionen ===
-function resetView(){
-  camera.position.set(0,102,0);
-  controls.getObject().rotation.set(0,0,0);
-}
-function toggleWireframe(){
-  earth.material.wireframe = !earth.material.wireframe;
-}
-function stepUp(){
-  stepSize=Math.min(50,stepSize+1);
-  document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m";
-}
-function stepDown(){
-  stepSize=Math.max(1,stepSize-1);
-  document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m";
-}
-
-window.addEventListener("resize",()=>{
-  camera.aspect=innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
-});
+window.addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 </script>
 </body>
 </html>
