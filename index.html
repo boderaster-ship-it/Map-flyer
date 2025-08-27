@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Earth FPS Explorer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<style>
+  html,body { margin:0; height:100%; overflow:hidden; background:#000; }
+  canvas { display:block; }
+
+  /* HUD / Menü */
+  #hud {
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    background:rgba(20,20,24,.65); border:1px solid rgba(255,255,255,.15);
+    border-radius:12px; backdrop-filter: blur(8px); padding:8px 12px; color:#fff;
+    font-family:sans-serif; font-size:14px; z-index:10;
+  }
+  #hud button { margin:2px; padding:6px 10px; border:none; border-radius:8px;
+    background:rgba(255,255,255,.15); color:#fff; cursor:pointer; }
+  #hud button:active { transform:translateY(1px); }
+
+  /* iPhone Steuerkreuz */
+  #controls {
+    position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+    width:240px; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,80px);
+    gap:8px; z-index:10;
+  }
+  #controls button {
+    border-radius:12px; background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.2);
+    color:#fff; font-size:20px; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+<div id="hud">
+  <b>Earth Explorer</b> · <span id="info">FPS über Erde</span><br>
+  <button onclick="resetView()">Reset</button>
+  <button onclick="toggleWireframe()">Wireframe</button>
+  <button onclick="stepUp()">Schritt+</button>
+  <button onclick="stepDown()">Schritt−</button>
+  <span id="stepLabel">Schritt: 2 m</span>
+</div>
+
+<div id="controls">
+  <span></span><button id="btnFwd">↑</button><span></span>
+  <button id="btnLeft">←</button><button id="btnBack">↓</button><button id="btnRight">→</button>
+  <span style="grid-column:1/4; text-align:center; color:#fff; opacity:.8; font-size:12px;">
+    Tipp: Tippen & Halten
+  </span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/controls/PointerLockControls.js"></script>
+<script>
+let scene, camera, renderer, earth, controls;
+let velocity = new THREE.Vector3();
+let move = {fwd:0, back:0, left:0, right:0};
+let stepSize = 2; // Meter
+
+init();
+animate();
+
+function init(){
+  // Szene
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  // Kamera
+  camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 10000);
+
+  // Renderer
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Erde
+  const geometry = new THREE.SphereGeometry(100, 128, 128);
+  const tex = new THREE.TextureLoader().load("earth.jpg",
+    ()=>console.log("Earth texture geladen"),
+    undefined,
+    ()=>console.warn("Keine Textur gefunden, Erde bleibt einfarbig")
+  );
+  const material = new THREE.MeshPhongMaterial({
+    map: tex,
+    color:0x3366ff, // fallback Wasser
+    flatShading:false
+  });
+  earth = new THREE.Mesh(geometry, material);
+  scene.add(earth);
+
+  // Licht
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(1,1,1).normalize();
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x333333));
+
+  // Controls (PointerLock)
+  controls = new THREE.PointerLockControls(camera, document.body);
+  document.body.addEventListener("click", ()=>controls.lock());
+  camera.position.set(0,102,0); // knapp über Oberfläche
+
+  // Key Steuerung
+  document.addEventListener("keydown", e=>{
+    if(e.code==="KeyW"||e.code==="ArrowUp") move.fwd=1;
+    if(e.code==="KeyS"||e.code==="ArrowDown") move.back=1;
+    if(e.code==="KeyA"||e.code==="ArrowLeft") move.left=1;
+    if(e.code==="KeyD"||e.code==="ArrowRight") move.right=1;
+  });
+  document.addEventListener("keyup", e=>{
+    if(e.code==="KeyW"||e.code==="ArrowUp") move.fwd=0;
+    if(e.code==="KeyS"||e.code==="ArrowDown") move.back=0;
+    if(e.code==="KeyA"||e.code==="ArrowLeft") move.left=0;
+    if(e.code==="KeyD"||e.code==="ArrowRight") move.right=0;
+  });
+
+  // Touch Buttons
+  hold(document.getElementById("btnFwd"), ()=>{move.fwd=1;}, ()=>{move.fwd=0;});
+  hold(document.getElementById("btnBack"),()=>{move.back=1;},()=>{move.back=0;});
+  hold(document.getElementById("btnLeft"),()=>{move.left=1;},()=>{move.left=0;});
+  hold(document.getElementById("btnRight"),()=>{move.right=1;},()=>{move.right=0;});
+}
+
+function hold(el, startFn, endFn){
+  let active=false;
+  const start=(e)=>{e.preventDefault(); if(!active){active=true; startFn();}};
+  const end =()=>{ if(active){active=false; endFn();}};
+  el.addEventListener("touchstart",start,{passive:false});
+  el.addEventListener("touchend",end);
+  el.addEventListener("mousedown",start);
+  el.addEventListener("mouseup",end);
+  el.addEventListener("mouseleave",end);
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  updateMovement();
+  renderer.render(scene,camera);
+}
+
+function updateMovement(){
+  const speed = stepSize*0.1;
+  if(move.fwd) controls.moveForward(speed);
+  if(move.back) controls.moveForward(-speed);
+  if(move.left) controls.moveRight(-speed);
+  if(move.right) controls.moveRight(speed);
+
+  // Spielerhöhe stabilisieren (knapp über Erde)
+  const pos = camera.position.clone().normalize().multiplyScalar(102);
+  camera.position.copy(pos);
+}
+
+function resetView(){
+  camera.position.set(0,102,0);
+  controls.getObject().rotation.set(0,0,0);
+}
+function toggleWireframe(){
+  earth.material.wireframe = !earth.material.wireframe;
+}
+function stepUp(){ stepSize=Math.min(50,stepSize+1); document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m"; }
+function stepDown(){ stepSize=Math.max(1,stepSize-1); document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m"; }
+
+window.addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
