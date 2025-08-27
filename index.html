@@ -8,7 +8,6 @@
   html,body { margin:0; height:100%; overflow:hidden; background:#000; }
   canvas { display:block; }
 
-  /* HUD / Menü */
   #hud {
     position:absolute; top:10px; left:50%; transform:translateX(-50%);
     background:rgba(20,20,24,.65); border:1px solid rgba(255,255,255,.15);
@@ -19,7 +18,6 @@
     background:rgba(255,255,255,.15); color:#fff; cursor:pointer; }
   #hud button:active { transform:translateY(1px); }
 
-  /* iPhone Steuerkreuz */
   #controls {
     position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
     width:240px; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,80px);
@@ -33,7 +31,7 @@
 </head>
 <body>
 <div id="hud">
-  <b>Earth Explorer</b> · <span id="info">FPS über Erde</span><br>
+  <b>Earth Explorer</b><br>
   <button onclick="resetView()">Reset</button>
   <button onclick="toggleWireframe()">Wireframe</button>
   <button onclick="stepUp()">Schritt+</button>
@@ -44,111 +42,92 @@
 <div id="controls">
   <span></span><button id="btnFwd">↑</button><span></span>
   <button id="btnLeft">←</button><button id="btnBack">↓</button><button id="btnRight">→</button>
-  <span style="grid-column:1/4; text-align:center; color:#fff; opacity:.8; font-size:12px;">
-    Tipp: Tippen & Halten
-  </span>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/controls/PointerLockControls.js"></script>
 <script>
-let scene, camera, renderer, earth, controls;
-let velocity = new THREE.Vector3();
-let move = {fwd:0, back:0, left:0, right:0};
-let stepSize = 2; // Meter
+// === Szene und Kamera ===
+let scene = new THREE.Scene();
+let camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
+let renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
 
-init();
-animate();
+// === Licht ===
+scene.add(new THREE.AmbientLight(0x999999));
+let sun = new THREE.DirectionalLight(0xffffff,1);
+sun.position.set(5,3,5);
+scene.add(sun);
 
-function init(){
-  // Szene
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000);
+// === Erde ===
+// NASA Blue Marble Tiles (einfache globale Textur als Fallback)
+const earthTex = new THREE.TextureLoader().load(
+  "https://eoimages.gsfc.nasa.gov/images/imagerecords/74000/74440/world.topo.bathy.200412.3x5400x2700.jpg"
+);
+const earthMat = new THREE.MeshPhongMaterial({ map: earthTex });
+let earth = new THREE.Mesh(new THREE.SphereGeometry(100,128,128), earthMat);
+scene.add(earth);
 
-  // Kamera
-  camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 10000);
+// === FPS Controls ===
+let controls = new THREE.PointerLockControls(camera, document.body);
+document.body.addEventListener("click", ()=>controls.lock());
+camera.position.set(0,102,0); // knapp über Oberfläche
 
-  // Renderer
-  renderer = new THREE.WebGLRenderer({antialias:true});
-  renderer.setSize(innerWidth, innerHeight);
-  document.body.appendChild(renderer.domElement);
+// === Bewegung ===
+let move={fwd:0, back:0, left:0, right:0};
+let stepSize=2;
 
-  // Erde
-  const geometry = new THREE.SphereGeometry(100, 128, 128);
-  const tex = new THREE.TextureLoader().load("earth.jpg",
-    ()=>console.log("Earth texture geladen"),
-    undefined,
-    ()=>console.warn("Keine Textur gefunden, Erde bleibt einfarbig")
-  );
-  const material = new THREE.MeshPhongMaterial({
-    map: tex,
-    color:0x3366ff, // fallback Wasser
-    flatShading:false
-  });
-  earth = new THREE.Mesh(geometry, material);
-  scene.add(earth);
+document.addEventListener("keydown", e=>{
+  if(e.code==="KeyW"||e.code==="ArrowUp") move.fwd=1;
+  if(e.code==="KeyS"||e.code==="ArrowDown") move.back=1;
+  if(e.code==="KeyA"||e.code==="ArrowLeft") move.left=1;
+  if(e.code==="KeyD"||e.code==="ArrowRight") move.right=1;
+});
+document.addEventListener("keyup", e=>{
+  if(e.code==="KeyW"||e.code==="ArrowUp") move.fwd=0;
+  if(e.code==="KeyS"||e.code==="ArrowDown") move.back=0;
+  if(e.code==="KeyA"||e.code==="ArrowLeft") move.left=0;
+  if(e.code==="KeyD"||e.code==="ArrowRight") move.right=0;
+});
 
-  // Licht
-  const light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(1,1,1).normalize();
-  scene.add(light);
-  scene.add(new THREE.AmbientLight(0x333333));
-
-  // Controls (PointerLock)
-  controls = new THREE.PointerLockControls(camera, document.body);
-  document.body.addEventListener("click", ()=>controls.lock());
-  camera.position.set(0,102,0); // knapp über Oberfläche
-
-  // Key Steuerung
-  document.addEventListener("keydown", e=>{
-    if(e.code==="KeyW"||e.code==="ArrowUp") move.fwd=1;
-    if(e.code==="KeyS"||e.code==="ArrowDown") move.back=1;
-    if(e.code==="KeyA"||e.code==="ArrowLeft") move.left=1;
-    if(e.code==="KeyD"||e.code==="ArrowRight") move.right=1;
-  });
-  document.addEventListener("keyup", e=>{
-    if(e.code==="KeyW"||e.code==="ArrowUp") move.fwd=0;
-    if(e.code==="KeyS"||e.code==="ArrowDown") move.back=0;
-    if(e.code==="KeyA"||e.code==="ArrowLeft") move.left=0;
-    if(e.code==="KeyD"||e.code==="ArrowRight") move.right=0;
-  });
-
-  // Touch Buttons
-  hold(document.getElementById("btnFwd"), ()=>{move.fwd=1;}, ()=>{move.fwd=0;});
-  hold(document.getElementById("btnBack"),()=>{move.back=1;},()=>{move.back=0;});
-  hold(document.getElementById("btnLeft"),()=>{move.left=1;},()=>{move.left=0;});
-  hold(document.getElementById("btnRight"),()=>{move.right=1;},()=>{move.right=0;});
-}
-
-function hold(el, startFn, endFn){
+// Touch Controls
+function hold(el,pressFn,releaseFn){
   let active=false;
-  const start=(e)=>{e.preventDefault(); if(!active){active=true; startFn();}};
-  const end =()=>{ if(active){active=false; endFn();}};
+  const start=e=>{e.preventDefault(); if(!active){active=true; pressFn();}};
+  const end=()=>{ if(active){active=false; releaseFn();}};
   el.addEventListener("touchstart",start,{passive:false});
   el.addEventListener("touchend",end);
   el.addEventListener("mousedown",start);
   el.addEventListener("mouseup",end);
   el.addEventListener("mouseleave",end);
 }
+hold(document.getElementById("btnFwd"), ()=>{move.fwd=1;}, ()=>{move.fwd=0;});
+hold(document.getElementById("btnBack"),()=>{move.back=1;},()=>{move.back=0;});
+hold(document.getElementById("btnLeft"),()=>{move.left=1;},()=>{move.left=0;});
+hold(document.getElementById("btnRight"),()=>{move.right=1;},()=>{move.right=0;});
 
+// === Animation ===
 function animate(){
   requestAnimationFrame(animate);
   updateMovement();
   renderer.render(scene,camera);
 }
+animate();
 
 function updateMovement(){
-  const speed = stepSize*0.1;
+  const speed = stepSize*0.05;
   if(move.fwd) controls.moveForward(speed);
   if(move.back) controls.moveForward(-speed);
   if(move.left) controls.moveRight(-speed);
   if(move.right) controls.moveRight(speed);
 
-  // Spielerhöhe stabilisieren (knapp über Erde)
+  // Spielerhöhe immer knapp über Erdoberfläche halten
   const pos = camera.position.clone().normalize().multiplyScalar(102);
   camera.position.copy(pos);
 }
 
+// === HUD Funktionen ===
 function resetView(){
   camera.position.set(0,102,0);
   controls.getObject().rotation.set(0,0,0);
@@ -156,8 +135,14 @@ function resetView(){
 function toggleWireframe(){
   earth.material.wireframe = !earth.material.wireframe;
 }
-function stepUp(){ stepSize=Math.min(50,stepSize+1); document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m"; }
-function stepDown(){ stepSize=Math.max(1,stepSize-1); document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m"; }
+function stepUp(){
+  stepSize=Math.min(50,stepSize+1);
+  document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m";
+}
+function stepDown(){
+  stepSize=Math.max(1,stepSize-1);
+  document.getElementById("stepLabel").textContent="Schritt: "+stepSize+" m";
+}
 
 window.addEventListener("resize",()=>{
   camera.aspect=innerWidth/innerHeight;
