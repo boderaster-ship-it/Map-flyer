@@ -56,6 +56,7 @@ topBtn.addEventListener('click',()=>{toggleTopView(true);});
 returnTopBtn.addEventListener('click',()=>{toggleTopView(false);});
 
 function showMenu(){
+  if(controls) controls.unlock();
   cancelAnimationFrame(animationId);
   clearInterval(timerInterval);
   gameScreen.classList.add('hidden');
@@ -94,6 +95,8 @@ function startGame(diff){
 
   controls=new PointerLockControls(camera, renderer.domElement);
   renderer.domElement.addEventListener('click',()=>controls.lock());
+  // Lock pointer immediately after starting so the game is ready to play
+  controls.lock();
 
   buildMaze();
   placeGoal();
